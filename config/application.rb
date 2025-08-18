@@ -64,6 +64,46 @@ module Chatwoot
 
     # Disable PDF/video preview generation as we don't use them
     config.active_storage.previewers = []
+
+    # CORS and iframe configuration for embedding
+    config.force_ssl = false if Rails.env.development?
+
+    # Allow embedding in iframes from specific domains only
+    config.action_dispatch.default_headers = {
+      'X-Frame-Options' => 'SAMEORIGIN'
+    }
+
+    # Custom middleware to handle iframe embedding for specific domains
+    config.middleware.insert_before ActionDispatch::Static, Class.new do
+      ALLOWED_DOMAINS = [
+        'gohighlevel.com',
+        'app.gohighlevel.com', 
+        'ibbec.com.br',
+        'app.ibbec.com.br',
+        'vendeflow.app',
+        'go.vendeflow.app'
+      ].freeze
+
+      def initialize(app)
+        @app = app
+      end
+
+      def call(env)
+        status, headers, response = @app.call(env)
+        
+        # Check if request is from allowed domain
+        origin = env['HTTP_ORIGIN'] || env['HTTP_REFERER']
+        if origin && ALLOWED_DOMAINS.any? { |domain| origin.include?(domain) }
+          headers['X-Frame-Options'] = 'ALLOWALL'
+          headers['Access-Control-Allow-Origin'] = origin
+          headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+          headers['Access-Control-Allow-Headers'] = 'Origin, Content-Type, Accept, Authorization, Token'
+          headers['Access-Control-Allow-Credentials'] = 'true'
+        end
+        
+        [status, headers, response]
+      end
+    end
   end
 
   def self.config
